@@ -18,27 +18,31 @@ class QuestionSelector:
         if enabled_cats and not chat.mixed_mode:
             base_query = base_query.where(Question.category.in_(enabled_cats))
 
-        # Get list of used question ids for this chat
-        used_stmt = select(UsedQuestion.question_id).where(UsedQuestion.chat_id == chat.chat_id)
-        used_res = await session.execute(used_stmt)
-        used_ids = set(used_res.scalars().all())
+        # Subquery for used questions in this chat
+        used_subquery = select(UsedQuestion.question_id).where(UsedQuestion.chat_id == chat.chat_id)
 
-        # Select unused questions
-        unused_query = base_query.where(not_(Question.id.in_(used_ids))) if used_ids else base_query
+        # Select unused questions using SQL subquery
+        unused_query = base_query.where(Question.id.not_in(used_subquery))
         res = await session.execute(unused_query)
         unused_ids = list(res.scalars().all())
 
         if not unused_ids:
-            logger.info(f"Chat {chat.chat_id} exhausted all questions in cycle. Resetting used questions history...")
-            # Clear used questions history for this chat to start a new cycle!
-            await session.execute(
-                delete(UsedQuestion).where(UsedQuestion.chat_id == chat.chat_id)
-            )
-            await session.commit()
+            # Check if base query has any questions at all (e.g. if category filter matched nothing)
+            base_res = await session.execute(base_query)
+            all_ids = list(base_res.scalars().all())
 
-            # Re-fetch all ids
-            res = await session.execute(base_query)
-            unused_ids = list(res.scalars().all())
+            if all_ids:
+                logger.info(f"Chat {chat.chat_id} exhausted all questions in current cycle. Resetting used questions history...")
+                await session.execute(
+                    delete(UsedQuestion).where(UsedQuestion.chat_id == chat.chat_id)
+                )
+                await session.commit()
+                unused_ids = all_ids
+            else:
+                # Fallback to all questions across all categories if specific category filter yielded 0 questions
+                logger.warning(f"No questions matched category filter for chat {chat.chat_id}. Falling back to all questions.")
+                all_res = await session.execute(select(Question.id))
+                unused_ids = list(all_res.scalars().all())
 
         if not unused_ids:
             logger.warning("No questions found in database!")

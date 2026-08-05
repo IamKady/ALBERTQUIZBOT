@@ -52,16 +52,35 @@ class PollManager:
             raw_q = raw_q.split("]", 1)[-1].strip()
 
         question_text = cls.sanitize_text(f"{header}\n\n{raw_q}", 300)
-        options = [
-            cls.sanitize_text(question.option_a, 100),
-            cls.sanitize_text(question.option_b, 100),
-            cls.sanitize_text(question.option_c, 100),
-            cls.sanitize_text(question.option_d, 100),
+        
+        raw_options = [
+            cls.sanitize_text(question.option_a or "Option A", 100),
+            cls.sanitize_text(question.option_b or "Option B", 100),
+            cls.sanitize_text(question.option_c or "Option C", 100),
+            cls.sanitize_text(question.option_d or "Option D", 100),
         ]
+        
+        # Ensure options are non-empty and distinct for Telegram Bot API
+        options = []
+        seen_opts = set()
+        for idx, opt in enumerate(raw_options):
+            cleaned = opt.strip() if opt and opt.strip() else f"Option {idx + 1}"
+            while cleaned in seen_opts:
+                cleaned = f"{cleaned} "  # append trailing space to make option unique
+            seen_opts.add(cleaned)
+            options.append(cleaned[:100])
+
         explanation = cls.sanitize_text(question.explanation or "", 200)
 
         quiz_duration = chat.quiz_duration_mins or 10
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=quiz_duration)
+        
+        # Telegram API requires open_period to be strictly between 5 and 600 seconds
+        open_period_secs = min(max(5, quiz_duration * 60), 600)
+        
+        correct_option_id = question.correct_option
+        if not (0 <= correct_option_id < len(options)):
+            correct_option_id = 0
 
         try:
             message = await bot.send_poll(
@@ -69,10 +88,10 @@ class PollManager:
                 question=question_text,
                 options=options,
                 type="quiz",
-                correct_option_id=question.correct_option,
+                correct_option_id=correct_option_id,
                 explanation=explanation if explanation else None,
                 is_anonymous=False,  # Essential to track individual user poll answers!
-                open_period=quiz_duration * 60  # Auto close poll on Telegram side
+                open_period=open_period_secs  # Auto close poll on Telegram side
             )
 
             active_poll = await create_active_poll(

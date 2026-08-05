@@ -117,7 +117,8 @@ class QuizScheduler:
                 if poll:
                     logger.info(f"Quiz poll successfully sent to chat {chat_id}.")
                 else:
-                    logger.warning(f"Poll send returned None for chat {chat_id}. Will retry in next cycle.")
+                    next_delay_secs = 30  # Quick retry in 30 seconds if poll creation failed
+                    logger.warning(f"Poll send returned None for chat {chat_id}. Will retry in {next_delay_secs} seconds.")
         except Exception as e:
             logger.error(f"Error executing quiz trigger for chat {chat_id}: {e}")
         finally:

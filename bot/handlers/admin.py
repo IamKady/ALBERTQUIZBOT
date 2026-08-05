@@ -132,7 +132,9 @@ async def cb_set_interval(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Unauthorized.", show_alert=True)
         return
 
-    await update_chat(session, chat_id, min_interval_mins=mins)
+    chat = await get_chat(session, chat_id)
+    new_max = chat.max_interval_mins if chat and chat.max_interval_mins >= mins else mins
+    await update_chat(session, chat_id, min_interval_mins=mins, max_interval_mins=new_max)
     await callback.answer(f"Minimum interval set to {mins} minutes.")
 
 @router.callback_query(F.data.startswith("adm_dur_"))

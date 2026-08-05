@@ -27,10 +27,16 @@ async def bot_added_or_promoted(event: ChatMemberUpdated, session: AsyncSession,
         scheduler.schedule_chat(chat.id, delay_seconds=5)
     
     try:
+        import html
+        title_escaped = html.escape(chat.title or "this group")
+        welcome_text = (
+            f"🎉 <b>Albert Quiz Bot is now active in {title_escaped}!</b>\n\n"
+            f"I will automatically send non-repeating quiz polls continuously at random intervals. Get ready to test your knowledge!"
+        )
         await event.bot.send_message(
             chat_id=chat.id,
-            text=f"🎉 **Albert Quiz Bot is now active in {chat.title or 'this group'}!**\n\nI will automatically send non-repeating quiz polls continuously at random intervals. Get ready to test your knowledge!",
-            parse_mode="Markdown"
+            text=welcome_text,
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.error(f"Could not send welcome message to chat {chat.id}: {e}")

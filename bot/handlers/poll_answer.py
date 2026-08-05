@@ -16,7 +16,8 @@ router = Router()
 @router.poll_answer()
 async def handle_poll_answer(poll_answer: PollAnswer, session: AsyncSession):
     user = poll_answer.user
-    if not user:
+    if not user or not poll_answer.option_ids:
+        # Ignore vote retractions or anonymous/empty answers
         return
 
     # Ensure user exists in DB
