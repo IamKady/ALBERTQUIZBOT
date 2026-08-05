@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     )
 
     @property
+    def ASYNC_DATABASE_URL(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
     def ADMIN_IDS(self) -> List[int]:
         raw = self.ADMIN_IDS_RAW
         if not raw:
