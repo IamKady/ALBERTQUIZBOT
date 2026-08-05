@@ -1,4 +1,5 @@
 import random
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
