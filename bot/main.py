@@ -28,7 +28,7 @@ async def main():
     await init_db()
 
     # Seed dataset if database is empty
-    await seed_database(50000)
+    await seed_database(5000)
 
     # Initialize Bot & Dispatcher
     bot = Bot(

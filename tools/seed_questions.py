@@ -384,12 +384,17 @@ def generate_human_questions(target_count: int = 50000) -> list:
     logger.info(f"Generated total {len(questions):,} human-like questions.")
     return questions
 
-async def seed_database(target_count: int = 50000):
+async def seed_database(target_count: int = 5000):
     await init_db()
 
     async with async_session() as session:
-        # Clear old questions to replace with 100% humanic dataset
-        logger.info("Clearing old questions and resetting question pool...")
+        existing_count = (await session.execute(select(func.count(Question.id)))).scalar_one()
+        if existing_count > 0:
+            logger.info(f"Database already populated with {existing_count:,} questions. Skipping seeding.")
+            return
+
+        logger.info("Database is empty. Populating initial question pool...")
+
         await session.execute(delete(Question))
         await session.commit()
 
