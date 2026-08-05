@@ -25,8 +25,16 @@ class QuizScheduler:
                 id="expired_polls_cleanup",
                 replace_existing=True
             )
+            # Add watchdog job to ensure all active chats stay scheduled every 2 minutes
+            self.scheduler.add_job(
+                self.watchdog_reschedule_active_chats,
+                trigger="interval",
+                minutes=2,
+                id="active_chats_watchdog",
+                replace_existing=True
+            )
             self.scheduler.start()
-            logger.info("Quiz Scheduler started.")
+            logger.info("Quiz Scheduler started with active watchdog.")
 
     def stop(self):
         if self.scheduler.running:
@@ -61,37 +69,61 @@ class QuizScheduler:
             chats = await get_active_chats(session)
             logger.info(f"Found {len(chats)} active chats to schedule.")
             for chat in chats:
-                self.schedule_chat(chat.chat_id, delay_seconds=random.randint(5, 60))
+                self.schedule_chat(chat.chat_id, delay_seconds=random.randint(5, 30))
+
+    async def watchdog_reschedule_active_chats(self):
+        try:
+            async with async_session() as session:
+                chats = await get_active_chats(session)
+                for chat in chats:
+                    job_id = f"quiz_job_{chat.chat_id}"
+                    if not self.scheduler.get_job(job_id):
+                        logger.warning(f"Watchdog: Active chat {chat.chat_id} has no running quiz job. Scheduling now.")
+                        self.schedule_chat(chat.chat_id, delay_seconds=random.randint(5, 20))
+        except Exception as e:
+            logger.error(f"Error in watchdog_reschedule_active_chats: {e}")
 
     async def _trigger_chat_quiz(self, chat_id: int):
-        async with async_session() as session:
-            chat = await get_chat(session, chat_id)
-            if not chat or not chat.is_active:
-                logger.info(f"Chat {chat_id} is inactive or not found. Skipping quiz trigger.")
-                return
+        next_delay_secs = 600  # Default 10 minutes fallback
+        should_reschedule = True
+        try:
+            async with async_session() as session:
+                chat = await get_chat(session, chat_id)
+                if not chat or not chat.is_active:
+                    logger.info(f"Chat {chat_id} is inactive or not found. Skipping quiz trigger.")
+                    should_reschedule = False
+                    return
 
-            # Send quiz poll
-            poll = await PollManager.send_quiz_poll(self.bot, session, chat)
-
-            # Schedule the next interval for this chat
-            min_m = chat.min_interval_mins or 10
-            max_m = chat.max_interval_mins or 10
-            if max_m < min_m:
-                max_m = min_m
-            
-            if min_m == max_m:
-                next_interval_mins = min_m
-            else:
-                possible_intervals = [10, 15, 25, 40, 60, 120]
-                valid_intervals = [i for i in possible_intervals if min_m <= i <= max_m]
-                if valid_intervals:
-                    next_interval_mins = random.choice(valid_intervals)
+                # Calculate next interval for this chat
+                min_m = chat.min_interval_mins or 10
+                max_m = chat.max_interval_mins or 10
+                if max_m < min_m:
+                    max_m = min_m
+                
+                if min_m == max_m:
+                    next_interval_mins = min_m
                 else:
-                    next_interval_mins = random.randint(min_m, max_m)
+                    possible_intervals = [10, 15, 25, 40, 60, 120]
+                    valid_intervals = [i for i in possible_intervals if min_m <= i <= max_m]
+                    if valid_intervals:
+                        next_interval_mins = random.choice(valid_intervals)
+                    else:
+                        next_interval_mins = random.randint(min_m, max_m)
 
-            next_delay_secs = next_interval_mins * 60
-            logger.info(f"Next quiz for chat {chat_id} scheduled in {next_interval_mins} minutes.")
-            self.schedule_chat(chat_id, delay_seconds=next_delay_secs)
+                next_delay_secs = next_interval_mins * 60
+
+                # Send quiz poll
+                poll = await PollManager.send_quiz_poll(self.bot, session, chat)
+                if poll:
+                    logger.info(f"Quiz poll successfully sent to chat {chat_id}.")
+                else:
+                    logger.warning(f"Poll send returned None for chat {chat_id}. Will retry in next cycle.")
+        except Exception as e:
+            logger.error(f"Error executing quiz trigger for chat {chat_id}: {e}")
+        finally:
+            if should_reschedule:
+                logger.info(f"Next quiz for chat {chat_id} scheduled in {next_delay_secs} seconds ({next_delay_secs // 60} mins).")
+                self.schedule_chat(chat_id, delay_seconds=next_delay_secs)
 
     async def cleanup_expired_polls(self):
         async with async_session() as session:
