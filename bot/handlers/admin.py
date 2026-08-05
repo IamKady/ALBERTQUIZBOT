@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 from bot.config.settings import settings
-from bot.database.crud import get_chat, update_chat, get_active_chats, get_global_stats
+from bot.database.crud import get_chat, get_or_create_chat, update_chat, get_active_chats, get_global_stats
 from bot.utils.backup import backup_database
 from bot.utils.exporter import export_questions_to_json
 from bot.utils.logger import logger
@@ -12,6 +12,15 @@ router = Router()
 
 def is_admin(user_id: int) -> bool:
     return settings.is_admin(user_id)
+
+async def is_user_chat_admin(bot, chat_id: int, user_id: int) -> bool:
+    if is_admin(user_id):
+        return True
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status in ["administrator", "creator"]
+    except Exception:
+        return False
 
 def get_admin_menu_keyboard(chat_id: int, is_active: bool, mixed_mode: bool) -> InlineKeyboardMarkup:
     toggle_text = "🔴 Pause Quizzes" if is_active else "🟢 Resume Quizzes"
@@ -39,11 +48,22 @@ def get_admin_menu_keyboard(chat_id: int, is_active: bool, mixed_mode: bool) -> 
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, session: AsyncSession):
-    if not is_admin(message.from_user.id) and message.chat.type not in ["group", "supergroup"]:
-        await message.answer("⚠️ Admin access restricted.")
-        return
+    if message.chat.type in ["group", "supergroup"]:
+        if not await is_user_chat_admin(message.bot, message.chat.id, message.from_user.id):
+            await message.answer("⚠️ Admin access restricted to group administrators.")
+            return
+        chat = await get_or_create_chat(
+            session=session,
+            chat_id=message.chat.id,
+            chat_title=message.chat.title,
+            chat_type=message.chat.type
+        )
+    else:
+        if not is_admin(message.from_user.id):
+            await message.answer("⚠️ Admin access restricted.")
+            return
+        chat = await get_chat(session, message.chat.id)
 
-    chat = await get_chat(session, message.chat.id)
     is_active = chat.is_active if chat else True
     mixed_mode = chat.mixed_mode if chat else True
 
@@ -59,8 +79,12 @@ async def cmd_admin(message: Message, session: AsyncSession):
     await message.answer(text, reply_markup=get_admin_menu_keyboard(message.chat.id, is_active, mixed_mode), parse_mode="Markdown")
 
 @router.callback_query(F.data.startswith("adm_toggle_"))
-async def cb_toggle_chat(callback: CallbackQuery, session: AsyncSession, scheduler):
+async def cb_toggle_chat(callback: CallbackQuery, session: AsyncSession, scheduler=None):
     chat_id = int(callback.data.split("_")[-1])
+    if not await is_user_chat_admin(callback.bot, chat_id, callback.from_user.id):
+        await callback.answer("Unauthorized.", show_alert=True)
+        return
+
     chat = await get_chat(session, chat_id)
     if not chat:
         await callback.answer("Chat not found.")
@@ -68,10 +92,11 @@ async def cb_toggle_chat(callback: CallbackQuery, session: AsyncSession, schedul
 
     new_status = not chat.is_active
     await update_chat(session, chat_id, is_active=new_status)
-    if new_status:
-        scheduler.schedule_chat(chat_id, delay_seconds=10)
-    else:
-        scheduler.unschedule_chat(chat_id)
+    if scheduler:
+        if new_status:
+            scheduler.schedule_chat(chat_id, delay_seconds=10)
+        else:
+            scheduler.unschedule_chat(chat_id)
 
     await callback.message.edit_reply_markup(
         reply_markup=get_admin_menu_keyboard(chat_id, new_status, chat.mixed_mode)
@@ -81,6 +106,10 @@ async def cb_toggle_chat(callback: CallbackQuery, session: AsyncSession, schedul
 @router.callback_query(F.data.startswith("adm_mixed_"))
 async def cb_toggle_mixed(callback: CallbackQuery, session: AsyncSession):
     chat_id = int(callback.data.split("_")[-1])
+    if not await is_user_chat_admin(callback.bot, chat_id, callback.from_user.id):
+        await callback.answer("Unauthorized.", show_alert=True)
+        return
+
     chat = await get_chat(session, chat_id)
     if not chat:
         await callback.answer("Chat not found.")
@@ -99,6 +128,10 @@ async def cb_set_interval(callback: CallbackQuery, session: AsyncSession):
     parts = callback.data.split("_")
     mins = int(parts[2])
     chat_id = int(parts[3])
+    if not await is_user_chat_admin(callback.bot, chat_id, callback.from_user.id):
+        await callback.answer("Unauthorized.", show_alert=True)
+        return
+
     await update_chat(session, chat_id, min_interval_mins=mins)
     await callback.answer(f"Minimum interval set to {mins} minutes.")
 
@@ -107,11 +140,18 @@ async def cb_set_duration(callback: CallbackQuery, session: AsyncSession):
     parts = callback.data.split("_")
     dur = int(parts[2])
     chat_id = int(parts[3])
+    if not await is_user_chat_admin(callback.bot, chat_id, callback.from_user.id):
+        await callback.answer("Unauthorized.", show_alert=True)
+        return
+
     await update_chat(session, chat_id, quiz_duration_mins=dur)
     await callback.answer(f"Quiz duration set to {dur} minutes.")
 
 @router.callback_query(F.data == "adm_stats")
 async def cb_admin_stats(callback: CallbackQuery, session: AsyncSession):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Unauthorized.", show_alert=True)
+        return
     stats = await get_global_stats(session)
     text = (
         f"📊 **Global System Stats**\n\n"
@@ -153,3 +193,4 @@ async def cmd_broadcast(message: Message, session: AsyncSession, bot):
             logger.error(f"Failed to broadcast to {chat.chat_id}: {e}")
 
     await message.answer(f"✅ Announcement broadcasted to {sent_count} active chats.")
+
