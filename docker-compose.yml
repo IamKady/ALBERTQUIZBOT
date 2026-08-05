@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: quizbot_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: quizuser
+      POSTGRES_PASSWORD: quizpassword
+      POSTGRES_DB: quizbot_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  quizbot:
+    build: .
+    container_name: quizbot_app
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      DATABASE_URL: postgresql+asyncpg://quizuser:quizpassword@postgres:5432/quizbot_db
+      ADMIN_IDS: ${ADMIN_IDS}
+      LOG_LEVEL: INFO
+    volumes:
+      - ./backups:/app/backups
+
+volumes:
+  postgres_data:

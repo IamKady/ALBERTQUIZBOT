@@ -1,0 +1,4 @@
+{
+  "welcome": "👋 Willkommen beim **Albert Quiz Bot**!\n\nIch sende automatisch zufällige Quiz-Fragen in Telegram-Gruppen.\n\nFüge mich als Administrator hinzu, um zu starten!",
+  "help": "📖 **Befehle:**\n/start - Starten\n/help - Hilfe\n/stats - Statistiken\n/categories - Kategorien\n/leaderboard - Bestenliste\n/myscore - Meine Punkte\n/random - Sofortiges Quiz"
+}

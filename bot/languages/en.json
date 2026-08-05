@@ -1,0 +1,10 @@
+{
+  "welcome": "👋 Welcome to **Albert Quiz Bot**!\n\nI automatically post non-repeating, randomized quizzes to Telegram groups and channels.\n\n📌 **Features:**\n• Continuous 24/7 automated quizzes\n• 50,000+ questions across 13+ categories\n• Automatic leaderboard tracking (+5 points correct, +2 fastest bonus)\n\nAdd me to your group or channel as an Administrator to get started automatically!",
+  "help": "📖 **Albert Quiz Bot Commands:**\n\n/start - Welcome message\n/help - Show this help menu\n/stats - Show quiz bot statistics\n/categories - Browse available quiz categories\n/leaderboard - View group & global leaderboards\n/myscore - Check your personal scores & rank\n/random - Request an instant quiz question",
+  "admin_only": "⚠️ This command is restricted to Bot Administrators.",
+  "group_admin_only": "⚠️ This command is restricted to Group Administrators.",
+  "quiz_started": "🎯 **New Quiz Question!** Answer below. Active for 10 minutes.",
+  "stats_title": "📊 **Albert Quiz Bot Statistics**",
+  "leaderboard_title": "🏆 **Quiz Leaderboard**",
+  "myscore_title": "🎖️ **Your Quiz Performance**"
+}
