@@ -4,7 +4,7 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 from bot.models import Question, Chat, ActivePoll
 from bot.poll_manager.question_selector import QuestionSelector
-from bot.database.crud import create_active_poll
+from bot.database.crud import create_active_poll, get_active_chat_polls, mark_poll_closed
 from bot.utils.logger import logger
 
 class PollManager:
@@ -16,6 +16,22 @@ class PollManager:
 
     @classmethod
     async def send_quiz_poll(cls, bot: Bot, session: AsyncSession, chat: Chat) -> Optional[ActivePoll]:
+        # Delete any previous active poll in this chat when a new one arrives
+        try:
+            previous_polls = await get_active_chat_polls(session, chat.chat_id)
+            for prev_poll in previous_polls:
+                try:
+                    await bot.stop_poll(chat_id=prev_poll.chat_id, message_id=prev_poll.message_id)
+                except Exception:
+                    pass
+                try:
+                    await bot.delete_message(chat_id=prev_poll.chat_id, message_id=prev_poll.message_id)
+                except Exception:
+                    pass
+                await mark_poll_closed(session, prev_poll.poll_id)
+        except Exception as e:
+            logger.debug(f"Previous poll cleanup warning for chat {chat.chat_id}: {e}")
+
         question: Optional[Question] = await QuestionSelector.get_next_question(session, chat)
         if not question:
             logger.warning(f"Could not fetch question for chat {chat.chat_id}")

@@ -23,7 +23,7 @@ def get_admin_menu_keyboard(chat_id: int, is_active: bool, mixed_mode: bool) -> 
             InlineKeyboardButton(text=mixed_text, callback_query_data=f"adm_mixed_{chat_id}")
         ],
         [
-            InlineKeyboardButton(text="⏱️ Set 15m Min Interval", callback_query_data=f"adm_interval_15_{chat_id}"),
+            InlineKeyboardButton(text="⏱️ Set 10m Interval", callback_query_data=f"adm_interval_10_{chat_id}"),
             InlineKeyboardButton(text="⏱️ Set 30m Min Interval", callback_query_data=f"adm_interval_30_{chat_id}")
         ],
         [

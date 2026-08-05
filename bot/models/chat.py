@@ -9,8 +9,8 @@ class Chat(Base):
     chat_title = Column(String(255), nullable=True)
     chat_type = Column(String(50), nullable=False)
     is_active = Column(Boolean, default=True, index=True)
-    min_interval_mins = Column(Integer, default=15)
-    max_interval_mins = Column(Integer, default=120)
+    min_interval_mins = Column(Integer, default=10)
+    max_interval_mins = Column(Integer, default=10)
     quiz_duration_mins = Column(Integer, default=10)
     categories_enabled = Column(Text, default="")  # comma separated categories or empty for all
     mixed_mode = Column(Boolean, default=True)

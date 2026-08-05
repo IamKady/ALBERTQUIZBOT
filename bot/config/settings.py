@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///./quizbot.db"
     ADMIN_IDS_RAW: str = Field(default="", alias="ADMIN_IDS")
-    DEFAULT_MIN_INTERVAL: int = 15
-    DEFAULT_MAX_INTERVAL: int = 120
+    DEFAULT_MIN_INTERVAL: int = 10
+    DEFAULT_MAX_INTERVAL: int = 10
     DEFAULT_QUIZ_DURATION: int = 10
     LOG_LEVEL: str = "INFO"
     DEFAULT_LANGUAGE: str = "en"

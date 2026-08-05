@@ -74,18 +74,20 @@ class QuizScheduler:
             poll = await PollManager.send_quiz_poll(self.bot, session, chat)
 
             # Schedule the next interval for this chat
-            min_m = chat.min_interval_mins or 15
-            max_m = chat.max_interval_mins or 120
+            min_m = chat.min_interval_mins or 10
+            max_m = chat.max_interval_mins or 10
             if max_m < min_m:
-                max_m = min_m + 5
+                max_m = min_m
             
-            # Preset random pick intervals as per requirement (15m, 25m, 40m, 1h, 2h) or uniform random
-            possible_intervals = [15, 25, 40, 60, 120]
-            valid_intervals = [i for i in possible_intervals if min_m <= i <= max_m]
-            if valid_intervals:
-                next_interval_mins = random.choice(valid_intervals)
+            if min_m == max_m:
+                next_interval_mins = min_m
             else:
-                next_interval_mins = random.randint(min_m, max_m)
+                possible_intervals = [10, 15, 25, 40, 60, 120]
+                valid_intervals = [i for i in possible_intervals if min_m <= i <= max_m]
+                if valid_intervals:
+                    next_interval_mins = random.choice(valid_intervals)
+                else:
+                    next_interval_mins = random.randint(min_m, max_m)
 
             next_delay_secs = next_interval_mins * 60
             logger.info(f"Next quiz for chat {chat_id} scheduled in {next_interval_mins} minutes.")

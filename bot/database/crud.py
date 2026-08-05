@@ -134,6 +134,11 @@ async def get_expired_active_polls(session: AsyncSession) -> List[ActivePoll]:
     res = await session.execute(stmt)
     return list(res.scalars().all())
 
+async def get_active_chat_polls(session: AsyncSession, chat_id: int) -> List[ActivePoll]:
+    stmt = select(ActivePoll).where(ActivePoll.closed == False, ActivePoll.chat_id == chat_id)
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
 async def mark_poll_closed(session: AsyncSession, poll_id: str):
     stmt = update(ActivePoll).where(ActivePoll.poll_id == poll_id).values(closed=True)
     await session.execute(stmt)
