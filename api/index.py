@@ -69,6 +69,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        import traceback
+        trace = traceback.format_exc()
+        logger.error(f"Unhandled serverless error: {trace}")
+        return HTMLResponse(content=f"<h1>500 Serverless Error</h1><pre>{trace}</pre>", status_code=500)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Visual Dashboard and Status Page for Albert Quiz Bot on Vercel."""

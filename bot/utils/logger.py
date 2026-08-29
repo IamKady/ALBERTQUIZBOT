@@ -6,8 +6,12 @@ def setup_logger():
     log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
     
     handler = logging.StreamHandler(sys.stdout)
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
     logging.basicConfig(
         level=log_level,
