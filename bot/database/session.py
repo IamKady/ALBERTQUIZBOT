@@ -4,16 +4,22 @@ from bot.config.settings import settings
 from bot.models import Base
 from bot.utils.logger import logger
 
-# SQLite needs connect_args check_same_thread=False
-connect_args = {}
+# Engine connection parameters optimized for both local SQLite and serverless cloud PostgreSQL
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
 if settings.ASYNC_DATABASE_URL.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Serverless cloud postgres connection resiliency
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
 
 engine = create_async_engine(
     settings.ASYNC_DATABASE_URL,
-    echo=False,
-    connect_args=connect_args,
-    future=True
+    **engine_kwargs
 )
 
 async_session = async_sessionmaker(

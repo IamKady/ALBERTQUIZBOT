@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     DEFAULT_QUIZ_DURATION: int = 10
     LOG_LEVEL: str = "INFO"
     DEFAULT_LANGUAGE: str = "en"
+    WEBHOOK_URL: str = ""
+    WEBHOOK_SECRET: str = ""
+    CRON_SECRET: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

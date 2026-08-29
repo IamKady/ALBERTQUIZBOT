@@ -1,0 +1,16 @@
+# Exclude heavy and local-only files from Vercel deployment bundle
+.git
+.gitignore
+.env
+quizbot.db
+quizbot.db*
+tests/
+.pytest_cache/
+pytest.ini
+Dockerfile
+docker-compose.yml
+__pycache__/
+*.pyc
+venv/
+.venv/
+

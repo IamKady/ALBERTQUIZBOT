@@ -127,20 +127,90 @@ class QuizScheduler:
                 self.schedule_chat(chat_id, delay_seconds=next_delay_secs)
 
     async def cleanup_expired_polls(self):
-        async with async_session() as session:
-            expired_polls = await get_expired_active_polls(session)
-            for poll in expired_polls:
-                try:
-                    # Stop poll on Telegram
-                    await self.bot.stop_poll(chat_id=poll.chat_id, message_id=poll.message_id)
-                except Exception as e:
-                    logger.debug(f"Could not stop poll {poll.poll_id}: {e}")
+        await cleanup_expired_polls(self.bot)
 
-                try:
-                    # Automatically delete poll message after 10 minutes expiration as per requirement
-                    await self.bot.delete_message(chat_id=poll.chat_id, message_id=poll.message_id)
-                except Exception as e:
-                    logger.debug(f"Could not delete message for poll {poll.poll_id}: {e}")
 
-                await mark_poll_closed(session, poll.poll_id)
-                logger.info(f"Cleaned up expired poll {poll.poll_id} in chat {poll.chat_id}.")
+async def cleanup_expired_polls(bot: Bot) -> int:
+    """Closes and deletes all expired active polls."""
+    cleaned = 0
+    async with async_session() as session:
+        expired_polls = await get_expired_active_polls(session)
+        for poll in expired_polls:
+            try:
+                # Stop poll on Telegram
+                await bot.stop_poll(chat_id=poll.chat_id, message_id=poll.message_id)
+            except Exception as e:
+                logger.debug(f"Could not stop poll {poll.poll_id}: {e}")
+
+            try:
+                # Automatically delete poll message after expiration
+                await bot.delete_message(chat_id=poll.chat_id, message_id=poll.message_id)
+            except Exception as e:
+                logger.debug(f"Could not delete message for poll {poll.poll_id}: {e}")
+
+            await mark_poll_closed(session, poll.poll_id)
+            cleaned += 1
+            logger.info(f"Cleaned up expired poll {poll.poll_id} in chat {poll.chat_id}.")
+    return cleaned
+
+
+async def run_cron_cycle(bot: Bot) -> dict:
+    """
+    Executes a serverless cron maintenance cycle:
+    1. Cleans up expired active polls across all chats.
+    2. Dispatches scheduled quiz polls to active chats that are due.
+    """
+    logger.info("Executing serverless cron maintenance cycle...")
+    cleaned_count = await cleanup_expired_polls(bot)
+    sent_count = 0
+
+    from sqlalchemy import select, func
+    from bot.models import ActivePoll
+    from bot.database.crud import get_active_chat_polls
+
+    async with async_session() as session:
+        chats = await get_active_chats(session)
+        now = datetime.now(timezone.utc)
+
+        for chat in chats:
+            try:
+                # If chat has any active (unexpired) poll right now, skip sending another
+                open_polls = await get_active_chat_polls(session, chat.chat_id)
+                if open_polls:
+                    continue
+
+                # Check when the last poll was sent
+                stmt = select(func.max(ActivePoll.created_at)).where(ActivePoll.chat_id == chat.chat_id)
+                res = await session.execute(stmt)
+                last_poll_time = res.scalar_one_or_none()
+
+                min_interval = chat.min_interval_mins or 10
+                is_due = False
+
+                if last_poll_time is None:
+                    is_due = True
+                else:
+                    if last_poll_time.tzinfo is None:
+                        last_poll_time = last_poll_time.replace(tzinfo=timezone.utc)
+                    elapsed = (now - last_poll_time).total_seconds()
+                    if elapsed >= (min_interval * 60):
+                        is_due = True
+
+                if is_due:
+                    poll = await PollManager.send_quiz_poll(bot, session, chat)
+                    if poll:
+                        sent_count += 1
+                        logger.info(f"Cron cycle dispatched quiz to chat {chat.chat_id}")
+            except Exception as e:
+                logger.error(f"Error checking/sending quiz for chat {chat.chat_id} in cron cycle: {e}")
+
+    result = {
+        "status": "success",
+        "cleaned_polls": cleaned_count,
+        "quizzes_sent": sent_count,
+        "total_active_chats": len(chats),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    logger.info(f"Cron cycle completed: {result}")
+    return result
+

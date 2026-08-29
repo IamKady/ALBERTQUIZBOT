@@ -99,6 +99,19 @@ docker-compose up -d --build
 
 ---
 
+## ⚡ Vercel Serverless Deployment
+
+Albert Quiz Bot is fully compatible with **Vercel Serverless** using Webhooks and FastAPI:
+
+1. Connect your GitHub repository to Vercel.
+2. Configure environment variables (`BOT_TOKEN`, `DATABASE_URL`, `WEBHOOK_URL`).
+3. Deploy and register the webhook in 1 click via `https://<your-project>.vercel.app/api/set-webhook`.
+
+👉 **Read the complete guide: [VERCEL_DEPLOYMENT.md](file:///d:/ALBERTQUIZBOT/VERCEL_DEPLOYMENT.md)**
+
+---
+
+
 ## 📜 Available Commands
 
 ### User Commands
