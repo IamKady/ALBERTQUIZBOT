@@ -26,6 +26,13 @@ class Settings(BaseSettings):
         except Exception:
             return 10
 
+    @field_validator("BOT_TOKEN", "DATABASE_URL", "WEBHOOK_URL", "WEBHOOK_SECRET", "CRON_SECRET", mode="before")
+    @classmethod
+    def strip_strings(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return v.strip()
+        return str(v) if v is not None else ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -35,14 +42,18 @@ class Settings(BaseSettings):
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
-        url = self.DATABASE_URL
+        url = (self.DATABASE_URL or "").strip()
         if os.environ.get("VERCEL") and "sqlite" in url:
             # On Vercel serverless, root filesystem is read-only. Fallback to /tmp.
             return "sqlite+aiosqlite:////tmp/quizbot.db"
         if url.startswith("postgres://"):
-            return url.replace("postgres://", "postgresql+asyncpg://", 1)
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
-            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # asyncpg does not accept sslmode= query param; it expects ssl=
+        if "sslmode=" in url:
+            url = url.replace("sslmode=", "ssl=")
         return url
 
     @property
