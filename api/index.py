@@ -5,7 +5,9 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 # Add project root directory to sys.path so bot modules can be imported
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+root_dir = str(Path(__file__).resolve().parent.parent)
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
 from fastapi import FastAPI, Request, Response, HTTPException, Header, Query
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -15,15 +17,20 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Update
 from sqlalchemy import text
 
-from bot.config.settings import settings
-from bot.database.session import init_db, engine
-from bot.handlers import main_router
-from bot.middlewares import DbSessionMiddleware, I18nMiddleware, RateLimitMiddleware
-from bot.scheduler import run_cron_cycle
-from bot.utils.logger import setup_logger, logger
-from tools.seed_questions import seed_database
+_startup_error = None
+try:
+    from bot.config.settings import settings
+    from bot.database.session import init_db, engine
+    from bot.handlers import main_router
+    from bot.middlewares import DbSessionMiddleware, I18nMiddleware, RateLimitMiddleware
+    from bot.scheduler import run_cron_cycle
+    from bot.utils.logger import setup_logger, logger
+    from tools.seed_questions import seed_database
+    setup_logger()
+except Exception as e:
+    import traceback
+    _startup_error = traceback.format_exc()
 
-setup_logger()
 
 # Global instances for serverless reuse across warm invocations
 _bot: Optional[Bot] = None
@@ -83,9 +90,28 @@ async def catch_exceptions_middleware(request: Request, call_next):
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Visual Dashboard and Status Page for Albert Quiz Bot on Vercel."""
+    if _startup_error:
+        return HTMLResponse(
+            content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Startup Error - Albert Quiz Bot</title></head>
+            <body style="background:#0f172a; color:#f8fafc; font-family:system-ui,sans-serif; padding:40px; line-height:1.6;">
+                <div style="max-width:800px; margin:0 auto;">
+                    <h1 style="color:#f43f5e; margin-top:0;">⚠️ Serverless Startup Error</h1>
+                    <p style="color:#94a3b8;">The following Python exception was caught during startup on Vercel:</p>
+                    <pre style="background:#1e293b; color:#fda4af; padding:20px; border-radius:8px; border:1px solid #334155; overflow:auto; font-size:14px;">{_startup_error}</pre>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
+
     base_url = str(request.base_url).rstrip("/")
-    bot_configured = bool(settings.BOT_TOKEN)
-    db_type = "PostgreSQL" if "postgres" in settings.DATABASE_URL else "SQLite"
+    bot_configured = bool(settings.BOT_TOKEN) if 'settings' in globals() else False
+    db_type = "PostgreSQL" if 'settings' in globals() and "postgres" in settings.DATABASE_URL else "SQLite"
+
 
     html_content = f"""
     <!DOCTYPE html>
