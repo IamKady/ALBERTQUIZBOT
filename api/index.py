@@ -52,28 +52,21 @@ def get_dispatcher() -> Dispatcher:
         _dp.include_router(main_router)
     return _dp
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize database tables on serverless startup
-    try:
-        await init_db()
-        logger.info("Database initialized successfully for serverless application.")
-    except Exception as e:
-        logger.error(f"Error during database initialization: {e}")
-    yield
-    # Shutdown / cleanup
-    global _bot
-    if _bot is not None:
+_db_initialized = False
+
+async def ensure_db():
+    global _db_initialized
+    if not _db_initialized:
         try:
-            await _bot.session.close()
-        except Exception:
-            pass
+            await init_db()
+            _db_initialized = True
+        except Exception as e:
+            logger.error(f"Database initialization warning: {e}")
 
 app = FastAPI(
     title="Albert Quiz Bot Serverless API",
     description="Production Telegram Quiz Bot on Vercel Serverless",
-    version="1.0.0",
-    lifespan=lifespan
+    version="1.0.0"
 )
 
 @app.get("/", response_class=HTMLResponse)
@@ -274,6 +267,7 @@ async def health():
     db_ok = False
     error_msg = None
     try:
+        await ensure_db()
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         db_ok = True
@@ -309,6 +303,7 @@ async def telegram_webhook(
 
     bot = get_bot()
     dp = get_dispatcher()
+    await ensure_db()
 
     try:
         payload = await request.json()

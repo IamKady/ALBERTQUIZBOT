@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         url = self.DATABASE_URL
+        if os.environ.get("VERCEL") and "sqlite" in url:
+            # On Vercel serverless, root filesystem is read-only. Fallback to /tmp.
+            return "sqlite+aiosqlite:////tmp/quizbot.db"
         if url.startswith("postgres://"):
             return url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
