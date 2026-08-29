@@ -1,3 +1,20 @@
+[project]
+name = "albertquizbot"
+version = "1.0.0"
+description = "Production Telegram Quiz Bot on Vercel Serverless"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.4.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
+    "apscheduler>=3.10.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+]
+
 [tool.vercel]
 entrypoint = "api.index:app"
-
