@@ -105,7 +105,7 @@ async def cmd_myscore(message: Message, session: AsyncSession):
     )
     await message.answer(text, parse_mode="Markdown")
 
-@router.message(Command("random"))
+@router.message(Command("random", "quiz"))
 async def cmd_random(message: Message, session: AsyncSession, bot):
     chat = await get_or_create_chat(
         session=session,
@@ -113,6 +113,9 @@ async def cmd_random(message: Message, session: AsyncSession, bot):
         chat_title=message.chat.title,
         chat_type=message.chat.type
     )
+    from bot.database.crud import update_chat
+    await update_chat(session, message.chat.id, is_active=True)
     poll = await PollManager.send_quiz_poll(bot, session, chat)
     if not poll:
         await message.answer("⚠️ Could not generate quiz poll at this time.")
+

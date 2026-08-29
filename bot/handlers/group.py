@@ -38,8 +38,10 @@ async def bot_added_or_promoted(event: ChatMemberUpdated, session: AsyncSession,
             text=welcome_text,
             parse_mode="HTML"
         )
+        from bot.poll_manager.engine import PollManager
+        await PollManager.send_quiz_poll(event.bot, session, db_chat)
     except Exception as e:
-        logger.error(f"Could not send welcome message to chat {chat.id}: {e}")
+        logger.error(f"Could not send welcome/quiz message to chat {chat.id}: {e}")
 
 @router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=LEAVE_TRANSITION))
 async def bot_removed_from_group(event: ChatMemberUpdated, session: AsyncSession, scheduler=None):
