@@ -12,7 +12,7 @@ class UserScore(Base):
     correct_count = Column(Integer, default=0, nullable=False)
     wrong_count = Column(Integer, default=0, nullable=False)
     fastest_bonus_count = Column(Integer, default=0, nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("score", 0)

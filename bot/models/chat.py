@@ -15,5 +15,5 @@ class Chat(Base):
     categories_enabled = Column(Text, default="")  # comma separated categories or empty for all
     mixed_mode = Column(Boolean, default=True)
     language = Column(String(10), default="en")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

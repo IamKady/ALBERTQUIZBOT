@@ -20,7 +20,7 @@ class Question(Base):
     source = Column(String(255), default="System")
     tags = Column(String(255), default="")
     language = Column(String(10), default="en", index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         Index("ix_question_cat_diff", "category", "difficulty"),

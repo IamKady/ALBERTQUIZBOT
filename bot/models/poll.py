@@ -9,7 +9,7 @@ class ActivePoll(Base):
     chat_id = Column(BigInteger, nullable=False, index=True)
     message_id = Column(Integer, nullable=False)
     question_id = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
     closed = Column(Boolean, default=False)
     fastest_answered = Column(Boolean, default=False)
