@@ -1,7 +1,7 @@
 import os
-from typing import List
+from typing import List, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 class Settings(BaseSettings):
     BOT_TOKEN: str = ""
@@ -16,11 +16,22 @@ class Settings(BaseSettings):
     WEBHOOK_SECRET: str = ""
     CRON_SECRET: str = ""
 
+    @field_validator("DEFAULT_MIN_INTERVAL", "DEFAULT_MAX_INTERVAL", "DEFAULT_QUIZ_DURATION", mode="before")
+    @classmethod
+    def parse_empty_int(cls, v: Any, info) -> int:
+        if v is None or v == "" or (isinstance(v, str) and not v.strip()):
+            return 10
+        try:
+            return int(v)
+        except Exception:
+            return 10
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
