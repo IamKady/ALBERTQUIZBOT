@@ -2,8 +2,13 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy import select, update, func, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from bot.config.settings import settings
 from bot.models import Chat, Question, User, UserScore, ActivePoll, UsedQuestion
 from bot.utils.logger import logger
+
+def utc_now() -> datetime:
+    """Returns naive UTC datetime matching SQLAlchemy DateTime (without timezone)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 async def get_or_create_chat(
     session: AsyncSession,
@@ -19,14 +24,26 @@ async def get_or_create_chat(
             chat_id=chat_id,
             chat_title=chat_title,
             chat_type=chat_type,
-            is_active=True
+            is_active=True,
+            min_interval_mins=settings.DEFAULT_MIN_INTERVAL,
+            max_interval_mins=settings.DEFAULT_MAX_INTERVAL,
+            quiz_duration_mins=settings.DEFAULT_QUIZ_DURATION
         )
         session.add(chat)
         await session.commit()
         await session.refresh(chat)
     else:
+        updated = False
         if chat_title and chat.chat_title != chat_title:
             chat.chat_title = chat_title
+            updated = True
+        if chat.min_interval_mins is None:
+            chat.min_interval_mins = settings.DEFAULT_MIN_INTERVAL
+            updated = True
+        if chat.max_interval_mins is None:
+            chat.max_interval_mins = settings.DEFAULT_MAX_INTERVAL
+            updated = True
+        if updated:
             await session.commit()
     return chat
 
@@ -99,7 +116,7 @@ async def record_user_answer(
         user_score.wrong_count = (user_score.wrong_count or 0) + 1
 
     user_score.score = (user_score.score or 0) + points_awarded
-    user_score.updated_at = datetime.now(timezone.utc)
+    user_score.updated_at = utc_now()
     await session.commit()
     await session.refresh(user_score)
     return points_awarded, user_score
@@ -112,6 +129,8 @@ async def create_active_poll(
     question_id: int,
     expires_at: datetime
 ) -> ActivePoll:
+    if expires_at.tzinfo is not None:
+        expires_at = expires_at.astimezone(timezone.utc).replace(tzinfo=None)
     active_poll = ActivePoll(
         poll_id=poll_id,
         chat_id=chat_id,
@@ -129,7 +148,7 @@ async def get_active_poll(session: AsyncSession, poll_id: str) -> Optional[Activ
     return res.scalar_one_or_none()
 
 async def get_expired_active_polls(session: AsyncSession) -> List[ActivePoll]:
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     stmt = select(ActivePoll).where(ActivePoll.closed == False, ActivePoll.expires_at <= now)
     res = await session.execute(stmt)
     return list(res.scalars().all())

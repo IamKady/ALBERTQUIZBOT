@@ -6,7 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.session import async_session
-from bot.database.crud import get_active_chats, get_chat, get_expired_active_polls, mark_poll_closed
+from bot.database.crud import get_active_chats, get_chat, get_expired_active_polls, mark_poll_closed, get_active_chat_polls
 from bot.poll_manager.engine import PollManager
 from bot.utils.logger import logger
 
@@ -166,17 +166,20 @@ async def run_cron_cycle(bot: Bot) -> dict:
 
     from sqlalchemy import select, func
     from bot.models import ActivePoll
-    from bot.database.crud import get_active_chat_polls
 
     async with async_session() as session:
         chats = await get_active_chats(session)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         for chat in chats:
             try:
                 # If chat has any active (unexpired) poll right now, skip sending another
                 open_polls = await get_active_chat_polls(session, chat.chat_id)
-                if open_polls:
+                active_open_polls = [
+                    p for p in open_polls
+                    if (p.expires_at.replace(tzinfo=None) if p.expires_at.tzinfo else p.expires_at) > now
+                ]
+                if active_open_polls:
                     continue
 
                 # Check when the last poll was sent
@@ -190,10 +193,11 @@ async def run_cron_cycle(bot: Bot) -> dict:
                 if last_poll_time is None:
                     is_due = True
                 else:
-                    if last_poll_time.tzinfo is None:
-                        last_poll_time = last_poll_time.replace(tzinfo=timezone.utc)
+                    if last_poll_time.tzinfo is not None:
+                        last_poll_time = last_poll_time.astimezone(timezone.utc).replace(tzinfo=None)
                     elapsed = (now - last_poll_time).total_seconds()
-                    if elapsed >= (min_interval * 60):
+                    # 45 seconds tolerance for cron jitter (e.g. cron triggers at 9m50s)
+                    if elapsed >= ((min_interval * 60) - 45):
                         is_due = True
 
                 if is_due:

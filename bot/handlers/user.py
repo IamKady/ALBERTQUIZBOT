@@ -44,10 +44,10 @@ async def cmd_categories(message: Message, session: AsyncSession):
 def build_leaderboard_keyboard(period: str = "all_time") -> InlineKeyboardMarkup:
     buttons = [
         [
-            InlineKeyboardButton(text="📅 Daily" if period == "daily" else "Daily", callback_query_data="lb_daily"),
-            InlineKeyboardButton(text="🗓️ Weekly" if period == "weekly" else "Weekly", callback_query_data="lb_weekly"),
-            InlineKeyboardButton(text="📆 Monthly" if period == "monthly" else "Monthly", callback_query_data="lb_monthly"),
-            InlineKeyboardButton(text="🏆 All-Time" if period == "all_time" else "All-Time", callback_query_data="lb_all_time"),
+            InlineKeyboardButton(text="📅 Daily" if period == "daily" else "Daily", callback_data="lb_daily"),
+            InlineKeyboardButton(text="🗓️ Weekly" if period == "weekly" else "Weekly", callback_data="lb_weekly"),
+            InlineKeyboardButton(text="📆 Monthly" if period == "monthly" else "Monthly", callback_data="lb_monthly"),
+            InlineKeyboardButton(text="🏆 All-Time" if period == "all_time" else "All-Time", callback_data="lb_all_time"),
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

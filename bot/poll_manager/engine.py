@@ -73,7 +73,7 @@ class PollManager:
         explanation = cls.sanitize_text(question.explanation or "", 200)
 
         quiz_duration = chat.quiz_duration_mins or 10
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=quiz_duration)
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=quiz_duration)).replace(tzinfo=None)
         
         # Telegram API requires open_period to be strictly between 5 and 600 seconds
         open_period_secs = min(max(5, quiz_duration * 60), 600)

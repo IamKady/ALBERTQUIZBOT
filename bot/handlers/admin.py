@@ -33,7 +33,7 @@ def get_admin_menu_keyboard(chat_id: int, is_active: bool, mixed_mode: bool) -> 
         ],
         [
             InlineKeyboardButton(text="⏱️ Set 10m Interval", callback_query_data=f"adm_interval_10_{chat_id}"),
-            InlineKeyboardButton(text="⏱️ Set 30m Min Interval", callback_query_data=f"adm_interval_30_{chat_id}")
+            InlineKeyboardButton(text="⏱️ Set 30m Interval", callback_query_data=f"adm_interval_30_{chat_id}")
         ],
         [
             InlineKeyboardButton(text="⏳ Set 10m Quiz Duration", callback_query_data=f"adm_dur_10_{chat_id}"),
@@ -71,9 +71,8 @@ async def cmd_admin(message: Message, session: AsyncSession):
         f"⚙️ **Admin Control Panel**\n\n"
         f"📍 **Target Chat ID:** `{message.chat.id}`\n"
         f"🔄 **Quiz Status:** {'Active 🟢' if is_active else 'Paused 🔴'}\n"
-        f"⏱️ **Min Interval:** {chat.min_interval_mins if chat else 15} mins\n"
-        f"⏱️ **Max Interval:** {chat.max_interval_mins if chat else 120} mins\n"
-        f"⏳ **Quiz Duration:** {chat.quiz_duration_mins if chat else 10} mins\n"
+        f"⏱️ **Interval:** {chat.min_interval_mins if chat else settings.DEFAULT_MIN_INTERVAL} mins\n"
+        f"⏳ **Quiz Duration:** {chat.quiz_duration_mins if chat else settings.DEFAULT_QUIZ_DURATION} mins\n"
         f"🔀 **Mixed Category Mode:** {'Enabled' if mixed_mode else 'Disabled'}\n"
     )
     await message.answer(text, reply_markup=get_admin_menu_keyboard(message.chat.id, is_active, mixed_mode), parse_mode="Markdown")
@@ -124,7 +123,7 @@ async def cb_toggle_mixed(callback: CallbackQuery, session: AsyncSession):
     await callback.answer(f"Mixed mode updated to {'ON' if new_mixed else 'OFF'}.")
 
 @router.callback_query(F.data.startswith("adm_interval_"))
-async def cb_set_interval(callback: CallbackQuery, session: AsyncSession):
+async def cb_set_interval(callback: CallbackQuery, session: AsyncSession, scheduler=None):
     parts = callback.data.split("_")
     mins = int(parts[2])
     chat_id = int(parts[3])
@@ -132,10 +131,29 @@ async def cb_set_interval(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Unauthorized.", show_alert=True)
         return
 
+    # Set both min and max to the chosen interval for fixed predictable cadence
+    await update_chat(session, chat_id, min_interval_mins=mins, max_interval_mins=mins)
+    
+    if scheduler:
+        scheduler.schedule_chat(chat_id, delay_seconds=mins * 60)
+
     chat = await get_chat(session, chat_id)
-    new_max = chat.max_interval_mins if chat and chat.max_interval_mins >= mins else mins
-    await update_chat(session, chat_id, min_interval_mins=mins, max_interval_mins=new_max)
-    await callback.answer(f"Minimum interval set to {mins} minutes.")
+    if chat and callback.message:
+        try:
+            await callback.message.edit_text(
+                f"⚙️ **Admin Control Panel**\n\n"
+                f"📍 **Target Chat ID:** `{chat_id}`\n"
+                f"🔄 **Quiz Status:** {'Active 🟢' if chat.is_active else 'Paused 🔴'}\n"
+                f"⏱️ **Interval:** {chat.min_interval_mins} mins\n"
+                f"⏳ **Quiz Duration:** {chat.quiz_duration_mins} mins\n"
+                f"🔀 **Mixed Category Mode:** {'Enabled' if chat.mixed_mode else 'Disabled'}\n",
+                reply_markup=get_admin_menu_keyboard(chat_id, chat.is_active, chat.mixed_mode),
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+
+    await callback.answer(f"Quiz interval set to {mins} minutes.")
 
 @router.callback_query(F.data.startswith("adm_dur_"))
 async def cb_set_duration(callback: CallbackQuery, session: AsyncSession):
@@ -195,4 +213,44 @@ async def cmd_broadcast(message: Message, session: AsyncSession, bot):
             logger.error(f"Failed to broadcast to {chat.chat_id}: {e}")
 
     await message.answer(f"✅ Announcement broadcasted to {sent_count} active chats.")
+
+@router.message(Command("interval", "setinterval"))
+async def cmd_set_interval(message: Message, session: AsyncSession, scheduler=None):
+    if message.chat.type in ["group", "supergroup"]:
+        if not await is_user_chat_admin(message.bot, message.chat.id, message.from_user.id):
+            await message.answer("⚠️ Admin access restricted to group administrators.")
+            return
+        chat = await get_or_create_chat(
+            session=session,
+            chat_id=message.chat.id,
+            chat_title=message.chat.title,
+            chat_type=message.chat.type
+        )
+    else:
+        if not is_admin(message.from_user.id):
+            await message.answer("⚠️ Admin access restricted.")
+            return
+        chat = await get_chat(session, message.chat.id)
+
+    chat_id = message.chat.id
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        current = chat.min_interval_mins if chat else settings.DEFAULT_MIN_INTERVAL
+        await message.answer(
+            f"⏱️ Current quiz interval is **{current} minutes**.\n\n"
+            f"To change it, send:\n`/interval 10` (or any minutes between 1 and 1440)",
+            parse_mode="Markdown"
+        )
+        return
+
+    mins = int(args[1])
+    if mins < 1 or mins > 1440:
+        await message.answer("⚠️ Interval must be between 1 and 1440 minutes.")
+        return
+
+    await update_chat(session, chat_id, min_interval_mins=mins, max_interval_mins=mins)
+    if scheduler:
+        scheduler.schedule_chat(chat_id, delay_seconds=mins * 60)
+
+    await message.answer(f"✅ Quiz interval successfully updated to **{mins} minutes**! The bot will dispatch quizzes every {mins} minutes.", parse_mode="Markdown")
 

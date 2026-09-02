@@ -12,7 +12,7 @@ class LeaderboardService:
         period: str = "all_time",
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         
         stmt = select(
             User.user_id,
