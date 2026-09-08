@@ -1,0 +1,45 @@
+name: Automated Quiz Delivery Cron
+
+on:
+  schedule:
+    # Runs every 10 minutes (24x7 automated quiz delivery)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  trigger-quiz-delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Serverless Cron Cycle
+        env:
+          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL || vars.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || vars.CRON_SECRET }}
+        run: |
+          if [ -z "$VERCEL_APP_URL" ]; then
+            echo "::warning ::VERCEL_APP_URL is not set in GitHub Secrets/Variables. Please add your Vercel deployment URL (e.g. https://your-project.vercel.app)."
+            exit 0
+          fi
+
+          BASE_URL="${VERCEL_APP_URL%/}"
+          CRON_URL="${BASE_URL}/api/cron"
+
+          echo "Pinging ${CRON_URL} to dispatch scheduled quizzes..."
+
+          if [ -n "$CRON_SECRET" ]; then
+            RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer ${CRON_SECRET}" -X POST "${CRON_URL}")
+          else
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${CRON_URL}")
+          fi
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Response HTTP Status: ${HTTP_CODE}"
+          echo "Response Body: ${BODY}"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Quiz delivery cron cycle completed successfully!"
+          else
+            echo "::error ::Cron cycle failed with HTTP status ${HTTP_CODE}."
+            exit 1
+          fi

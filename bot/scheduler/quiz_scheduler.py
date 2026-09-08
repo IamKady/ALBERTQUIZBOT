@@ -13,7 +13,7 @@ from bot.utils.logger import logger
 class QuizScheduler:
     def __init__(self, bot: Bot):
         self.bot = bot
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(timezone=timezone.utc)
 
     def start(self):
         if not self.scheduler.running:
@@ -148,9 +148,13 @@ async def cleanup_expired_polls(bot: Bot) -> int:
             except Exception as e:
                 logger.debug(f"Could not delete message for poll {poll.poll_id}: {e}")
 
-            await mark_poll_closed(session, poll.poll_id)
-            cleaned += 1
-            logger.info(f"Cleaned up expired poll {poll.poll_id} in chat {poll.chat_id}.")
+            try:
+                await mark_poll_closed(session, poll.poll_id)
+                cleaned += 1
+                logger.info(f"Cleaned up expired poll {poll.poll_id} in chat {poll.chat_id}.")
+            except Exception as e:
+                await session.rollback()
+                logger.error(f"Could not mark poll closed {poll.poll_id}: {e}")
     return cleaned
 
 
@@ -163,56 +167,97 @@ async def run_cron_cycle(bot: Bot) -> dict:
     logger.info("Executing serverless cron maintenance cycle...")
     cleaned_count = await cleanup_expired_polls(bot)
     sent_count = 0
+    chat_details = []
 
     from sqlalchemy import select, func
     from bot.models import ActivePoll
 
     async with async_session() as session:
         chats = await get_active_chats(session)
+        chat_ids = [c.chat_id for c in chats]
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        for chat in chats:
+        for chat_id in chat_ids:
+            chat_info = {
+                "chat_id": chat_id,
+                "title": str(chat_id),
+                "min_interval_mins": 10,
+                "is_due": False,
+                "action": "skipped"
+            }
+
             try:
+                chat = await get_chat(session, chat_id)
+                if not chat or not chat.is_active:
+                    chat_info["action"] = "inactive_or_not_found"
+                    chat_details.append(chat_info)
+                    continue
+
+                chat_title = chat.chat_title or str(chat_id)
+                min_interval = chat.min_interval_mins or 10
+                chat_info["title"] = chat_title
+                chat_info["min_interval_mins"] = min_interval
+
                 # If chat has any active (unexpired) poll right now, skip sending another
-                open_polls = await get_active_chat_polls(session, chat.chat_id)
+                open_polls = await get_active_chat_polls(session, chat_id)
                 active_open_polls = [
                     p for p in open_polls
                     if (p.expires_at.replace(tzinfo=None) if p.expires_at.tzinfo else p.expires_at) > now
                 ]
                 if active_open_polls:
+                    chat_info["action"] = "skipped_active_poll_in_progress"
+                    chat_info["active_poll_id"] = active_open_polls[0].poll_id
+                    chat_details.append(chat_info)
                     continue
 
                 # Check when the last poll was sent
-                stmt = select(func.max(ActivePoll.created_at)).where(ActivePoll.chat_id == chat.chat_id)
+                stmt = select(func.max(ActivePoll.created_at)).where(ActivePoll.chat_id == chat_id)
                 res = await session.execute(stmt)
                 last_poll_time = res.scalar_one_or_none()
 
-                min_interval = chat.min_interval_mins or 10
                 is_due = False
-
                 if last_poll_time is None:
                     is_due = True
+                    chat_info["last_poll_time"] = None
+                    chat_info["elapsed_seconds"] = None
                 else:
                     if last_poll_time.tzinfo is not None:
                         last_poll_time = last_poll_time.astimezone(timezone.utc).replace(tzinfo=None)
                     elapsed = (now - last_poll_time).total_seconds()
+                    chat_info["last_poll_time"] = last_poll_time.isoformat()
+                    chat_info["elapsed_seconds"] = int(elapsed)
                     # 45 seconds tolerance for cron jitter (e.g. cron triggers at 9m50s)
                     if elapsed >= ((min_interval * 60) - 45):
                         is_due = True
+
+                chat_info["is_due"] = is_due
 
                 if is_due:
                     poll = await PollManager.send_quiz_poll(bot, session, chat)
                     if poll:
                         sent_count += 1
-                        logger.info(f"Cron cycle dispatched quiz to chat {chat.chat_id}")
+                        chat_info["action"] = "quiz_dispatched"
+                        chat_info["poll_id"] = poll.poll_id
+                        logger.info(f"Cron cycle dispatched quiz to chat {chat_id}")
+                    else:
+                        chat_info["action"] = "poll_generation_failed"
+                        logger.warning(f"Poll generation returned None for chat {chat_id}")
+                else:
+                    chat_info["action"] = "not_due_yet"
+
             except Exception as e:
-                logger.error(f"Error checking/sending quiz for chat {chat.chat_id} in cron cycle: {e}")
+                await session.rollback()
+                chat_info["action"] = f"error: {str(e)}"
+                logger.error(f"Error checking/sending quiz for chat {chat_id} in cron cycle: {e}")
+
+            chat_details.append(chat_info)
 
     result = {
         "status": "success",
         "cleaned_polls": cleaned_count,
         "quizzes_sent": sent_count,
         "total_active_chats": len(chats),
+        "chat_details": chat_details,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     logger.info(f"Cron cycle completed: {result}")

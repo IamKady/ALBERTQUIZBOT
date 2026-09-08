@@ -97,3 +97,56 @@ async def test_run_cron_cycle_dispatches_due_quiz(scheduler_session):
         assert result["status"] == "success"
         assert result["quizzes_sent"] == 1
         assert result["total_active_chats"] == 1
+        assert "chat_details" in result
+        assert len(result["chat_details"]) == 1
+        assert result["chat_details"][0]["action"] == "quiz_dispatched"
+        assert result["chat_details"][0]["chat_id"] == -100555666
+
+@pytest.mark.asyncio
+async def test_run_cron_cycle_chat_error_isolation(scheduler_session):
+    mock_bot = MagicMock()
+    mock_bot.stop_poll = AsyncMock()
+    mock_bot.delete_message = AsyncMock()
+
+    # Create two active chats
+    chat1 = await get_or_create_chat(
+        session=scheduler_session,
+        chat_id=-100111111,
+        chat_title="Failing Chat",
+        chat_type="supergroup"
+    )
+    chat2 = await get_or_create_chat(
+        session=scheduler_session,
+        chat_id=-100222222,
+        chat_title="Succeeding Chat",
+        chat_type="supergroup"
+    )
+
+    @asynccontextmanager
+    async def mock_async_session():
+        yield scheduler_session
+
+    async def mock_send(bot, session, chat):
+        if chat.chat_id == -100111111:
+            raise RuntimeError("Simulated Telegram API error for chat 1")
+        mock_poll = MagicMock()
+        mock_poll.poll_id = "poll_success_2"
+        return mock_poll
+
+    with patch("bot.scheduler.quiz_scheduler.async_session", side_effect=mock_async_session), \
+         patch("bot.poll_manager.engine.PollManager.send_quiz_poll", side_effect=mock_send):
+
+        result = await run_cron_cycle(mock_bot)
+        assert result["status"] == "success"
+        assert result["quizzes_sent"] == 1
+        assert result["total_active_chats"] == 2
+        assert len(result["chat_details"]) == 2
+
+        # Verify chat 1 errored cleanly without crashing the cycle
+        c1 = next(c for c in result["chat_details"] if c["chat_id"] == -100111111)
+        assert "error" in c1["action"]
+
+        # Verify chat 2 succeeded
+        c2 = next(c for c in result["chat_details"] if c["chat_id"] == -100222222)
+        assert c2["action"] == "quiz_dispatched"
+

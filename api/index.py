@@ -450,6 +450,7 @@ async def cron_trigger(
     """
     verify_cron_auth(request, secret)
     bot = get_bot()
+    await ensure_db()
     result = await run_cron_cycle(bot)
     return result
 

@@ -116,9 +116,14 @@ python tools/seed_questions.py
 ## ⏰ Step 5: Automated Quizzes & Cron Jobs
 
 ### Built-in Vercel Cron
-`vercel.json` already schedules `/api/cron` to run every 10 minutes:
+`vercel.json` schedules `/api/cron` to run every 10 minutes:
 ```json
 {
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron",
@@ -128,8 +133,15 @@ python tools/seed_questions.py
 }
 ```
 
-### Free External Cron (Alternative for Vercel Hobby Plan)
-*Vercel Hobby plan limits native cron executions to once daily.* For frequent 10-15 minute intervals on Hobby:
+### Option A: Free 24/7 Delivery via GitHub Actions (Recommended for Vercel Hobby)
+*Vercel Hobby plan limits native cron executions to once daily.* A pre-configured GitHub Actions workflow is included in `.github/workflows/quiz_cron.yml` that runs every 10 minutes for free:
+1. In your GitHub repository, go to **Settings** → **Secrets and variables** → **Actions**.
+2. Under **Variables** (or Secrets), add:
+   - `VERCEL_APP_URL`: `https://<your-project-name>.vercel.app`
+   - `CRON_SECRET`: *(Optional)* Your `CRON_SECRET` if configured in `.env`.
+3. Go to the **Actions** tab in GitHub and ensure workflows are enabled. Quizzes will now dispatch automatically every 10 minutes around the clock!
+
+### Option B: Free External Cron via cron-job.org
 1. Create a free account at [cron-job.org](https://cron-job.org).
 2. Create a new cron job pointing to:
    ```
