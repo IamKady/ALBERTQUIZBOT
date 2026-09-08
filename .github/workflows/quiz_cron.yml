@@ -12,8 +12,8 @@ jobs:
     steps:
       - name: Trigger Vercel Serverless Cron Cycle
         env:
-          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL || vars.VERCEL_APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET || vars.CRON_SECRET }}
+          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL || vars.VERCEL_APP_URL || 'https://albertquizbot.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || vars.CRON_SECRET || '' }}
         run: |
           if [ -z "$VERCEL_APP_URL" ]; then
             echo "::warning ::VERCEL_APP_URL is not set in GitHub Secrets/Variables. Please add your Vercel deployment URL (e.g. https://your-project.vercel.app)."
