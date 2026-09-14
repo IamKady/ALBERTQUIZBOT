@@ -198,18 +198,6 @@ async def run_cron_cycle(bot: Bot) -> dict:
                 chat_info["title"] = chat_title
                 chat_info["min_interval_mins"] = min_interval
 
-                # If chat has any active (unexpired) poll right now, skip sending another
-                open_polls = await get_active_chat_polls(session, chat_id)
-                active_open_polls = [
-                    p for p in open_polls
-                    if (p.expires_at.replace(tzinfo=None) if p.expires_at.tzinfo else p.expires_at) > now
-                ]
-                if active_open_polls:
-                    chat_info["action"] = "skipped_active_poll_in_progress"
-                    chat_info["active_poll_id"] = active_open_polls[0].poll_id
-                    chat_details.append(chat_info)
-                    continue
-
                 # Check when the last poll was sent
                 stmt = select(func.max(ActivePoll.created_at)).where(ActivePoll.chat_id == chat_id)
                 res = await session.execute(stmt)

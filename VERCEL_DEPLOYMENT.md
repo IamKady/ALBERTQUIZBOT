@@ -115,8 +115,8 @@ python tools/seed_questions.py
 
 ## ⏰ Step 5: Automated Quizzes & Cron Jobs
 
-### Built-in Vercel Cron
-`vercel.json` schedules `/api/cron` to run every 10 minutes:
+### Vercel Hobby Plan Cron Configuration
+On the free Vercel Hobby plan, native cron jobs are restricted to at most **once daily**. In `vercel.json`, we configure a daily maintenance trigger at midnight UTC (`0 0 * * *`):
 ```json
 {
   "functions": {
@@ -127,28 +127,31 @@ python tools/seed_questions.py
   "crons": [
     {
       "path": "/api/cron",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
 ```
 
-### Option A: Free 24/7 Delivery via GitHub Actions (Recommended for Vercel Hobby)
-*Vercel Hobby plan limits native cron executions to once daily.* A pre-configured GitHub Actions workflow is included in `.github/workflows/quiz_cron.yml` that runs every 10 minutes for free:
-1. In your GitHub repository, go to **Settings** → **Secrets and variables** → **Actions**.
-2. Under **Variables** (or Secrets), add:
-   - `VERCEL_APP_URL`: `https://<your-project-name>.vercel.app`
-   - `CRON_SECRET`: *(Optional)* Your `CRON_SECRET` if configured in `.env`.
-3. Go to the **Actions** tab in GitHub and ensure workflows are enabled. Quizzes will now dispatch automatically every 10 minutes around the clock!
+### Setting Up Continuous 10-Minute Quiz Delivery
 
-### Option B: Free External Cron via cron-job.org
+To deliver quizzes automatically every 10 minutes to your Telegram groups, use either of the two methods below:
+
+#### Option A: Free Dedicated Cron via cron-job.org (⭐ Most Reliable)
+Because GitHub Actions can delay scheduled workflows during peak hours, **cron-job.org** is the recommended free service to ping your bot every 10 minutes with second-level precision:
 1. Create a free account at [cron-job.org](https://cron-job.org).
-2. Create a new cron job pointing to:
-   ```
-   https://<your-project-name>.vercel.app/api/cron
-   ```
-3. Set the schedule to every 10, 15, or 30 minutes.
-4. If `CRON_SECRET` is configured, add header `Authorization: Bearer <CRON_SECRET>` or append `?secret=<CRON_SECRET>`.
+2. Click **Create Cronjob**.
+3. Set the **URL**: `https://albertquizbot.vercel.app/api/cron` (or your custom domain).
+4. Set the **Execution schedule**: User-defined → **Every 10 minutes**.
+5. Request method: `POST` (or `GET`).
+6. *(Optional)* If you set a `CRON_SECRET`, add header `Authorization: Bearer <YOUR_SECRET>` or append `?secret=<YOUR_SECRET>`.
+7. Click **Create**. Quizzes will now dispatch reliably every 10 minutes, 24/7!
+
+#### Option B: Automated Delivery via GitHub Actions
+A pre-configured GitHub Actions workflow is included in `.github/workflows/quiz_cron.yml`:
+1. In your GitHub repository, navigate to the **Actions** tab.
+2. Enable workflows if prompted.
+3. The workflow runs on a schedule and can also be triggered manually anytime by selecting **Automated Quiz Delivery Cron** → **Run workflow**.
 
 ---
 
